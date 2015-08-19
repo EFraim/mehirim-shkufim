@@ -26,6 +26,9 @@
 				 file-x file-y)) files)
 		   )))))
 
+(defun starts-with (str prefix)
+  (and (stringp str) (stringp prefix) (<= (length prefix) (length str)) (string-equal (subseq str 0 (length prefix)) prefix)))
+
 (defun download-file (url local cookies)
   (ensure-directories-exist local)
   (let* ((gzipped (string-equal ".gz"
@@ -66,9 +69,9 @@
 	 (file-list (drakma:http-request "https://url.publishedprices.co.il/file/ajax_dir?cd=/&iDisplayStart=0&iDisplayLength=9999"
 					 :cookie-jar cookie-jar))
 	 (files (assoc :AA-DATA (with-input-from-string (s file-list) (json:decode-json s))))
-	 (prices (remove-if-not (lambda (x) (and (listp x) (string-equal (subseq (cdr (assoc :NAME x)) 0 9) "PriceFull"))) files))
-	 (promos (remove-if-not (lambda (x) (and (listp x) (string-equal (subseq (cdr (assoc :NAME x)) 0 9) "PromoFull"))) files))
-	 (stores (remove-if-not (lambda (x) (and (listp x) (string-equal (subseq (cdr (assoc :NAME x)) 0 6) "Stores"))) files))
+	 (prices (remove-if-not (lambda (x) (and (listp x) (starts-with (cdr (assoc :NAME x)) "PriceFull"))) files))
+	 (promos (remove-if-not (lambda (x) (and (listp x) (starts-with (cdr (assoc :NAME x)) "PromoFull"))) files))
+	 (stores (remove-if-not (lambda (x) (and (listp x) (starts-with (cdr (assoc :NAME x)) "Stores"))) files))
 	 (last-price-file (most-recent-file prices))
 	 (last-promo-file (most-recent-file promos))
 	 (last-store-file (most-recent-file stores)))
@@ -79,6 +82,10 @@
     (unless (null last-store-file)
       (download-file (concatenate 'string "https://url.publishedprices.co.il/file/d/" (drakma:url-encode last-store-file :latin-1)) (concatenate 'string localdir "/last-store-file.xml") cookie-jar))
     ))
+
+(defun snapshot-nibit (localdir)
+  (trivial-shell:shell-command (format nil "bash /home/evgeny/projects/mehirimShkufim/pullerMatrix.sh ~a" localdir))
+)  
 
 (defparameter *snapshot* (format nil "~a" (local-time:today)))
 
@@ -93,6 +100,7 @@
     ((:name . "SuperDosh") (:username . "SuperDosh") (:password . "") (:type . published-prices))
     ((:name . "yohananof") (:username . "yohananof") (:password . "") (:type . published-prices))
 					;((:name . "freshmarket") (:username . "freshmarket_sn") (:password . "f_efrd") (:type . published-prices)))
+    ((:name . "Nibit") (:type . nibit))
     ))
 
 (dolist (src *sources*)
@@ -100,4 +108,6 @@
     ((eq (cdr (assoc :type src)) 'published-prices)
      (snapshot-published-prices (concatenate 'string *snapshot* "/" (cdr (assoc :name src)))
 				(cdr (assoc :username src)) (cdr (assoc :password src))))
+    ((eq (cdr (assoc :type src)) 'nibit)
+     (snapshot-nibit (concatenate 'string *snapshot* "/Nibit")))
     (t (error "Unknown source type"))))
