@@ -31,11 +31,7 @@
 
 (defun download-file (url local cookies)
   (ensure-directories-exist local)
-  (let* ((gzipped (string-equal ".gz"
-				(subseq url (- (length url) 3))))
-	 (download-file-name (if gzipped
-				 (concatenate 'string local ".gz")
-				 local)))
+  (let* ((download-file-name local))
     (with-open-file (out download-file-name
 			 :direction :output
 			 :element-type '(unsigned-byte 8)
@@ -43,8 +39,7 @@
       (write-sequence (drakma:http-request url
 					   :cookie-jar cookies
 					   :force-binary 't)
-		      out))
-    (when gzipped (trivial-shell:shell-command (concatenate 'string "gunzip " download-file-name)))))
+		      out))))
 
 (defun snapshot-published-prices (localdir user password)
   (let* ((cookie-jar (make-instance 'drakma:cookie-jar))
@@ -69,18 +64,13 @@
 	 (file-list (drakma:http-request "https://url.publishedprices.co.il/file/ajax_dir?cd=/&iDisplayStart=0&iDisplayLength=9999"
 					 :cookie-jar cookie-jar))
 	 (files (assoc :AA-DATA (with-input-from-string (s file-list) (json:decode-json s))))
-	 (prices (remove-if-not (lambda (x) (and (listp x) (starts-with (cdr (assoc :NAME x)) "PriceFull"))) files))
-	 (promos (remove-if-not (lambda (x) (and (listp x) (starts-with (cdr (assoc :NAME x)) "PromoFull"))) files))
-	 (stores (remove-if-not (lambda (x) (and (listp x) (starts-with (cdr (assoc :NAME x)) "Stores"))) files))
-	 (last-price-file (most-recent-file prices))
-	 (last-promo-file (most-recent-file promos))
-	 (last-store-file (most-recent-file stores)))
-    (unless (null last-price-file)
-      (download-file (concatenate 'string "https://url.publishedprices.co.il/file/d/" (drakma:url-encode last-price-file :latin-1)) (concatenate 'string localdir "/last-price-file.xml") cookie-jar))
-    (unless (null last-promo-file)
-      (download-file (concatenate 'string "https://url.publishedprices.co.il/file/d/" (drakma:url-encode last-promo-file :latin-1)) (concatenate 'string localdir "/last-promo-file.xml") cookie-jar))
-    (unless (null last-store-file)
-      (download-file (concatenate 'string "https://url.publishedprices.co.il/file/d/" (drakma:url-encode last-store-file :latin-1)) (concatenate 'string localdir "/last-store-file.xml") cookie-jar))
+	 (prices-full (remove-if-not (lambda (x) (and (listp x) (starts-with (cdr (assoc :NAME x)) "PriceFull"))) files))
+	 (promos-full (remove-if-not (lambda (x) (and (listp x) (starts-with (cdr (assoc :NAME x)) "PromoFull"))) files))
+	 (prices (remove-if-not (lambda (x) (and (listp x) (starts-with (cdr (assoc :NAME x)) "Price"))) files))
+	 (promos (remove-if-not (lambda (x) (and (listp x) (starts-with (cdr (assoc :NAME x)) "Promo"))) files))
+	 (stores (remove-if-not (lambda (x) (and (listp x) (starts-with (cdr (assoc :NAME x)) "Stores"))) files)))
+    (dolist (file (remove-duplicates (append prices promos stores prices-full promos-full)))
+      (download-file (concatenate 'string "https://url.publishedprices.co.il/file/d/" (drakma:url-encode (cdr (assoc :VALUE file)) :latin-1)) (concatenate 'string localdir "/" (cdr (assoc :NAME file))) cookie-jar))
     ))
 
 (defun snapshot-nibit (localdir)
@@ -99,7 +89,7 @@
     ((:name . "RamiLevi") (:username . "RamiLevi") (:password . "") (:type . published-prices))
     ((:name . "SuperDosh") (:username . "SuperDosh") (:password . "") (:type . published-prices))
     ((:name . "yohananof") (:username . "yohananof") (:password . "") (:type . published-prices))
-					;((:name . "freshmarket") (:username . "freshmarket_sn") (:password . "f_efrd") (:type . published-prices)))
+	;;((:name . "freshmarket") (:username . "freshmarket_sn") (:password . "f_efrd") (:type . published-prices))
     ((:name . "Nibit") (:type . nibit))
     ))
 
